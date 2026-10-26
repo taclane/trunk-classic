@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Trunk Classic</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./app.js"></script>
+</head>
+<body>
+<header class="bar">
+  <span class="brand">TRUNK CLASSIC</span>
+  <label class="sys">SYSTEM <select id="system" aria-label="System"></select></label>
+  <span id="state" class="state">CONNECTING</span>
+  <span id="now" class="now"></span>
+  <span class="spacer"></span>
+  <span id="clock" class="clock"></span>
+  <button type="button" id="listen" class="key" aria-pressed="false" title="Live audio of this system (L)"><u>L</u>ISTEN</button>
+</header>
+
+<section class="sites" aria-label="Sites"><table id="sites"></table></section>
+
+<nav class="tabs" id="tabs" aria-label="Panes">
+  <button type="button" data-tab="channels" class="narrow">1 CHANNELS</button>
+  <button type="button" data-tab="events" class="narrow">2 EVENTS</button>
+  <button type="button" data-tab="groups">3 GROUPS</button>
+  <button type="button" data-tab="users">4 USERS</button>
+  <button type="button" data-tab="calls">5 CALLS</button>
+  <button type="button" data-tab="neighbors">6 NEIGHBORS</button>
+  <button type="button" data-tab="patches">7 PATCHES</button>
+  <span class="spacer"></span>
+  <input id="filter" class="filter" type="search" placeholder="/ filter" aria-label="Filter the table" spellcheck="false" autocomplete="off">
+</nav>
+
+<main class="panes">
+  <section class="pane pinned" data-pane="channels">
+    <h2 class="title">CHANNELS <span class="sub" id="channels-sub"></span></h2>
+    <div class="scroll"><table id="channels"></table></div>
+  </section>
+
+  <section class="pane pinned" data-pane="events">
+    <h2 class="title">EVENTS
+      <span class="tools" id="kinds"></span>
+      <button type="button" id="pause" class="key small" aria-pressed="false" title="Pause the events (Space)">PAUSE</button>
+    </h2>
+    <div class="scroll" id="events-scroll"><table id="events" class="events"></table></div>
+  </section>
+
+  <section class="pane" data-pane="groups">
+    <h2 class="title">GROUPS <span class="sub" id="groups-sub"></span>
+      <label class="tools">HEARD IN <select class="hours" aria-label="Heard in the last"></select></label>
+    </h2>
+    <div class="scroll"><table id="groups"></table></div>
+  </section>
+
+  <section class="pane" data-pane="users">
+    <h2 class="title">USERS <span class="sub" id="users-sub"></span>
+      <label class="tools">HEARD IN <select class="hours" aria-label="Heard in the last"></select></label>
+    </h2>
+    <div class="scroll"><table id="users"></table></div>
+  </section>
+
+  <section class="pane" data-pane="calls">
+    <h2 class="title">CALLS <span class="sub">CLICK ONE TO PLAY IT</span></h2>
+    <div class="scroll"><table id="calls"></table></div>
+    <audio id="player" preload="none"></audio>
+  </section>
+
+  <section class="pane" data-pane="neighbors">
+    <h2 class="title">NEIGHBORS <span class="sub">ADJACENT SITES EACH CONTROL CHANNEL ANNOUNCES</span></h2>
+    <div class="scroll"><table id="neighbors"></table></div>
+  </section>
+
+  <section class="pane" data-pane="patches">
+    <h2 class="title">PATCHES <span class="sub">STANDING NOW</span></h2>
+    <div class="scroll"><table id="patches"></table></div>
+  </section>
+</main>
+
+<footer class="keys">
+  <span><b>1-7</b> PANES</span>
+  <span><b>/</b> FILTER</span>
+  <span><b>L</b> LISTEN</span>
+  <span><b>SPACE</b> PAUSE EVENTS</span>
+  <span>CLICK A HEADING TO SORT</span>
+  <span class="spacer"></span>
+  <span id="poll" class="dim"></span>
+</footer>
+</body>
+</html>

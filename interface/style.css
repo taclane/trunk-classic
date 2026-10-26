@@ -1,0 +1,219 @@
+:root {
+  --bg: #0a0d14;
+  --panel: #0e1320;
+  --line: #1c2538;
+  --fg: #c8cfda;
+  --dim: #66748a;
+  --head: #5fd7ff;
+  --title-fg: #0a0d14;
+  --cc: #5fafff;
+  --rec: #87ff87;
+  --mon: #ffd75f;
+  --enc: #d787ff;
+  --emerg: #ff5f5f;
+  --sel: #16233a;
+  color-scheme: dark;
+  scrollbar-color: var(--line) var(--bg);
+  --font: ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.35 var(--font);
+  display: flex;
+  flex-direction: column;
+}
+
+button, select, input { font: inherit; color: inherit; }
+
+.spacer { flex: 1; }
+.dim { color: var(--dim); }
+
+/* The top line */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2ch;
+  padding: 4px 1ch;
+  background: var(--head);
+  color: var(--title-fg);
+  flex-wrap: wrap;
+}
+.brand { font-weight: 700; letter-spacing: 0.1em; }
+.sys select {
+  background: var(--title-fg);
+  color: var(--head);
+  border: 0;
+  padding: 0 0.5ch;
+}
+.state { font-weight: 700; }
+.state.off { color: #7a1010; }
+.now { font-weight: 700; }
+
+.key {
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  padding: 0 1ch;
+  cursor: pointer;
+}
+.bar .key { background: var(--title-fg); color: var(--head); border-color: var(--title-fg); }
+.key[aria-pressed="true"] { background: var(--rec); color: var(--title-fg); border-color: var(--rec); }
+.key.small { padding: 0 0.6ch; }
+
+/* Sites */
+.sites { border-bottom: 1px solid var(--line); overflow-x: auto; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.tabs button {
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--line);
+  color: var(--dim);
+  padding: 2px 1.5ch;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tabs button[aria-selected="true"] { background: var(--sel); color: var(--head); }
+.filter {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 0 1ch;
+  margin: 2px 1ch;
+  width: 22ch;
+}
+
+/* Panes: on a wide screen, channels and events on the left, the chosen tab on the right */
+.panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-areas: "chan tab" "ev tab";
+}
+.pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--line); }
+.pane[data-pane="channels"] { grid-area: chan; border-bottom: 1px solid var(--line); }
+.pane[data-pane="events"] { grid-area: ev; }
+.pane:not(.pinned) { grid-area: tab; border-right: 0; }
+.pane:not(.pinned):not(.shown) { display: none; }
+.tabs .narrow { display: none; }
+
+.title {
+  margin: 0;
+  font: inherit;
+  font-weight: 700;
+  background: var(--line);
+  color: var(--head);
+  padding: 1px 1ch;
+  display: flex;
+  align-items: center;
+  gap: 1.5ch;
+  flex-wrap: wrap;
+}
+.title .sub { color: var(--dim); font-weight: 400; }
+.title .tools { display: inline-flex; gap: 0.5ch; align-items: center; font-weight: 400; color: var(--dim); flex-wrap: wrap; }
+.title select { background: var(--panel); border: 1px solid var(--line); }
+.title .tools + .key, .title .key { margin-left: auto; }
+.chip {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  padding: 0 0.6ch;
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] { color: var(--bg); border-color: currentColor; }
+.chip[aria-pressed="true"].k-grant { background: var(--rec); }
+.chip[aria-pressed="true"].k-update { background: #5f875f; }
+.chip[aria-pressed="true"].k-unit { background: var(--head); }
+.chip[aria-pressed="true"].k-patch { background: var(--enc); }
+.chip[aria-pressed="true"].k-site { background: var(--cc); }
+.chip[aria-pressed="true"].k-rec { background: var(--mon); }
+.chip[aria-pressed="true"].k-raw { background: var(--dim); }
+
+.scroll { flex: 1; min-height: 0; overflow: auto; }
+
+/* Tables read as text */
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 0 0.75ch; text-align: left; white-space: pre; vertical-align: top; }
+th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--head);
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--line);
+}
+.sites th { position: static; cursor: default; }
+th.asc::after { content: " ▲"; }
+th.desc::after { content: " ▼"; }
+.num { text-align: right; }
+td.tag { max-width: 20ch; overflow: hidden; text-overflow: ellipsis; }
+td.wide { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
+tbody tr:hover { background: var(--sel); }
+tr.empty td { color: var(--dim); padding: 1ch; white-space: normal; }
+
+/* What a row is */
+tr.cc { color: var(--cc); }
+tr.on { color: var(--rec); }
+tr.mon { color: var(--mon); }
+tr.enc { color: var(--enc); }
+tr.emerg, tr.emerg td { color: var(--emerg); font-weight: 700; }
+tr.idle { color: var(--dim); }
+tr.new td:first-child::before { content: "+"; color: var(--mon); }
+tr.play { cursor: pointer; }
+tr.playing { background: var(--sel); color: var(--rec); }
+td.bad { color: var(--emerg); }
+td.warn { color: var(--mon); }
+
+/* Events */
+.events td { white-space: pre; }
+.events td.text { white-space: pre-wrap; word-break: break-word; }
+.events .k-grant { color: var(--rec); }
+.events .k-update { color: #5f875f; }
+.events .k-unit { color: var(--head); }
+.events .k-patch { color: var(--enc); }
+.events .k-site { color: var(--cc); }
+.events .k-rec { color: var(--mon); }
+.events .k-raw { color: var(--dim); }
+.events .e-emerg td { color: var(--emerg); font-weight: 700; }
+.events .e-error td { color: var(--emerg); }
+
+/* Footer */
+.keys {
+  display: flex;
+  gap: 2.5ch;
+  padding: 2px 1ch;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  flex-wrap: wrap;
+}
+.keys b { color: var(--head); font-weight: 400; }
+
+/* Narrow: one pane at a time, every pane a tab */
+@media (max-width: 1000px) {
+  body { height: auto; min-height: 100%; }
+  .panes { display: block; }
+  .pane, .pane.pinned { border-right: 0; }
+  .pane.pinned:not(.shown) { display: none; }
+  .pane .scroll { max-height: 70vh; }
+  .tabs { flex-wrap: wrap; }
+  .tabs .narrow { display: inline-block; }
+  .bar { gap: 1.5ch; }
+  .keys { display: none; }
+  .filter { width: 14ch; }
+}

@@ -1,0 +1,48 @@
+# Push a tag v<version> (the version in interface/interface.json) to package
+# the interface and publish a GitHub release:
+#
+#   <id>-<version>.zip               one folder, <id>-<version>/, with interface/'s files
+#   <id>-<version>-<file name>       each screenshot interface.json lists, on its own
+#   SHA256SUMS                       what the registry pins
+#
+# Each file also gets a build provenance attestation: a signed record that
+# GitHub Actions built it from this repository at the tagged commit. Check
+# one with `gh attestation verify <file> --repo <owner>/<repo>`.
+#
+# The names are what the recorder's installer and the registry look for:
+# keep them. .github/package.sh makes them; run it to see what a release
+# will hold.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # For the provenance attestations.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package (checks interface.json, and that the tag is v<version>)
+        run: .github/package.sh "$GITHUB_REF_NAME"
+      - name: Build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: dist/SHA256SUMS
+      - name: Release notes (this version's section of CHANGELOG.md, if there is one)
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="## [$v]" 'index($0, v) == 1 {on = 1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md 2>/dev/null || true
+          [ -s notes.md ] || python3 -c 'import json; m = json.load(open("interface/interface.json")); print(m["name"], m["version"])' > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: dist/*

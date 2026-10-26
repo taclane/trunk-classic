@@ -1,0 +1,19 @@
+# Package the interface on every push and pull request, so a broken
+# interface.json (or a screenshot that's missing or too big) shows up here,
+# not when you tag a release.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: .github/package.sh
