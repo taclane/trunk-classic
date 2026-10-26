@@ -6,5 +6,19 @@
   "api": 1,
   "access": "listen",
   "license": "MIT",
-  "repository": "https://github.com/taclane/trunk-classic"
+  "repository": "https://github.com/taclane/trunk-classic",
+  "screenshots": [
+    {
+      "path": "screenshots/main.png",
+      "caption": "Channels, the control channel's messages, and the talkgroups heard"
+    },
+    {
+      "path": "screenshots/users.png",
+      "caption": "Radios: their affiliations, registrations and airtime"
+    },
+    {
+      "path": "screenshots/phone.png",
+      "caption": "At phone width"
+    }
+  ]
 }
