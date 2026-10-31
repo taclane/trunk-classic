@@ -23,34 +23,44 @@
 <section class="sites" aria-label="Sites"><table id="sites"></table></section>
 
 <nav class="tabs" id="tabs" aria-label="Panes">
-  <button type="button" data-tab="channels" class="narrow">1 CHANNELS</button>
-  <button type="button" data-tab="events" class="narrow">2 EVENTS</button>
+  <button type="button" data-tab="channels">1 CHANNELS</button>
+  <button type="button" data-tab="events">2 EVENTS</button>
   <button type="button" data-tab="groups">3 GROUPS</button>
   <button type="button" data-tab="users">4 USERS</button>
   <button type="button" data-tab="calls">5 CALLS</button>
   <button type="button" data-tab="neighbors">6 NEIGHBORS</button>
   <button type="button" data-tab="patches">7 PATCHES</button>
   <span class="spacer"></span>
-  <input id="filter" class="filter" type="search" placeholder="/ filter" aria-label="Filter the table" spellcheck="false" autocomplete="off">
+  <input id="filter" class="filter" type="search" placeholder="/ filter" aria-label="Filter the tables shown" spellcheck="false" autocomplete="off">
 </nav>
 
-<main class="panes">
-  <section class="pane pinned" data-pane="channels">
-    <h2 class="title">CHANNELS <span class="sub" id="channels-sub"></span></h2>
+<main class="panes" id="panes">
+  <div class="col" id="left">
+  <section class="pane" data-pane="channels">
+    <h2 class="title">CHANNELS <span class="sub" id="channels-sub"></span>
+      <button type="button" class="key small" data-cols="channels" title="Choose the columns (or right-click a heading)">COLS</button>
+    </h2>
     <div class="scroll"><table id="channels"></table></div>
   </section>
 
-  <section class="pane pinned" data-pane="events">
+  <div class="divider h" id="split-y" role="separator" aria-orientation="horizontal" aria-label="Channels and events" tabindex="0" title="Drag to resize (double-click: even)"></div>
+
+  <section class="pane" data-pane="events">
     <h2 class="title">EVENTS
       <span class="tools" id="kinds"></span>
       <button type="button" id="pause" class="key small" aria-pressed="false" title="Pause the events (Space)">PAUSE</button>
     </h2>
     <div class="scroll" id="events-scroll"><table id="events" class="events"></table></div>
   </section>
+  </div>
 
+  <div class="divider v" id="split-x" role="separator" aria-orientation="vertical" aria-label="Left and right" tabindex="0" title="Drag to resize (double-click: even)"></div>
+
+  <div class="col" id="right">
   <section class="pane" data-pane="groups">
     <h2 class="title">GROUPS <span class="sub" id="groups-sub"></span>
       <label class="tools">HEARD IN <select class="hours" aria-label="Heard in the last"></select></label>
+      <button type="button" class="key small" data-cols="groups" title="Choose the columns (or right-click a heading)">COLS</button>
     </h2>
     <div class="scroll"><table id="groups"></table></div>
   </section>
@@ -58,33 +68,46 @@
   <section class="pane" data-pane="users">
     <h2 class="title">USERS <span class="sub" id="users-sub"></span>
       <label class="tools">HEARD IN <select class="hours" aria-label="Heard in the last"></select></label>
+      <button type="button" class="key small" data-cols="users" title="Choose the columns (or right-click a heading)">COLS</button>
     </h2>
     <div class="scroll"><table id="users"></table></div>
   </section>
 
   <section class="pane" data-pane="calls">
-    <h2 class="title">CALLS <span class="sub">CLICK ONE TO PLAY IT</span></h2>
+    <h2 class="title">CALLS <span class="sub">CLICK ONE TO PLAY IT</span>
+      <button type="button" class="key small" data-cols="calls" title="Choose the columns (or right-click a heading)">COLS</button>
+    </h2>
     <div class="scroll"><table id="calls"></table></div>
     <audio id="player" preload="none"></audio>
   </section>
 
   <section class="pane" data-pane="neighbors">
-    <h2 class="title">NEIGHBORS <span class="sub">ADJACENT SITES EACH CONTROL CHANNEL ANNOUNCES</span></h2>
+    <h2 class="title">NEIGHBORS <span class="sub">ADJACENT SITES EACH CONTROL CHANNEL ANNOUNCES</span>
+      <button type="button" class="key small" data-cols="neighbors" title="Choose the columns (or right-click a heading)">COLS</button>
+    </h2>
     <div class="scroll"><table id="neighbors"></table></div>
   </section>
 
   <section class="pane" data-pane="patches">
-    <h2 class="title">PATCHES <span class="sub">STANDING NOW</span></h2>
+    <h2 class="title">PATCHES <span class="sub">STANDING NOW</span>
+      <button type="button" class="key small" data-cols="patches" title="Choose the columns (or right-click a heading)">COLS</button>
+    </h2>
     <div class="scroll"><table id="patches"></table></div>
   </section>
+  </div>
+
+  <p class="nothing" id="nothing">NOTHING SHOWN · PRESS 1-7 TO SHOW A PANE</p>
 </main>
 
+<div class="menu" id="colmenu" role="dialog" aria-label="Columns" hidden></div>
+
 <footer class="keys">
-  <span><b>1-7</b> PANES</span>
+  <span><b>1-7</b> SHOW / HIDE PANES</span>
   <span><b>/</b> FILTER</span>
   <span><b>L</b> LISTEN</span>
   <span><b>SPACE</b> PAUSE EVENTS</span>
   <span>CLICK A HEADING TO SORT</span>
+  <span><b class="new">+</b> FIRST HEARD IN 24 H</span>
   <span class="spacer"></span>
   <span id="poll" class="dim"></span>
 </footer>

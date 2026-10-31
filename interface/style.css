@@ -86,7 +86,7 @@ button, select, input { font: inherit; color: inherit; }
   cursor: pointer;
   white-space: nowrap;
 }
-.tabs button[aria-selected="true"] { background: var(--sel); color: var(--head); }
+.tabs button[aria-pressed="true"] { background: var(--sel); color: var(--head); }
 .filter {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -95,21 +95,56 @@ button, select, input { font: inherit; color: inherit; }
   width: 22ch;
 }
 
-/* Panes: on a wide screen, channels and events on the left, the chosen tab on the right */
+/* Panes: on a wide screen, channels over events on the left, one of the others on the right;
+   any of them can be hidden, and the dividers dragged. */
 .panes {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  grid-template-areas: "chan tab" "ev tab";
+  display: flex;
+  --split-x: 50%;
+  --split-y: 45%;
 }
-.pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--line); }
-.pane[data-pane="channels"] { grid-area: chan; border-bottom: 1px solid var(--line); }
-.pane[data-pane="events"] { grid-area: ev; }
-.pane:not(.pinned) { grid-area: tab; border-right: 0; }
-.pane:not(.pinned):not(.shown) { display: none; }
-.tabs .narrow { display: none; }
+.col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#left { flex: 0 0 var(--split-x); }
+#right { flex: 1 1 0; }
+.panes.no-right #left { flex: 1 1 0; }
+.panes.no-left #left, .panes.no-right #right { display: none; }
+.pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: 1 1 0; }
+.pane:not(.shown) { display: none; }
+#left .pane[data-pane="channels"] { flex: 0 0 var(--split-y); }
+#left:not(:has(.pane[data-pane="events"].shown)) .pane[data-pane="channels"] { flex: 1 1 0; }
+
+/* A thin line, with a wider strip either side to grab. */
+.divider { flex: 0 0 2px; background: var(--line); touch-action: none; position: relative; z-index: 1; }
+.divider::before { content: ""; position: absolute; inset: 0 -3px; }
+.divider.h::before { inset: -3px 0; }
+.divider.v { cursor: col-resize; }
+.divider.h { cursor: row-resize; }
+.divider:hover, .divider:focus-visible, .divider.dragging { background: var(--dim); outline: none; }
+.panes.no-left #split-x, .panes.no-right #split-x,
+#left:not(:has(.pane[data-pane="channels"].shown)) #split-y,
+#left:not(:has(.pane[data-pane="events"].shown)) #split-y { display: none; }
+
+.nothing { margin: auto; color: var(--dim); display: none; }
+.panes.no-left.no-right .nothing { display: block; }
+
+/* Choosing a table's columns */
+.menu {
+  position: fixed;
+  z-index: 10;
+  background: var(--panel);
+  border: 1px solid var(--dim);
+  padding: 0.5ch 0;
+  min-width: 18ch;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 4px 16px #000a;
+}
+.menu .head { color: var(--head); padding: 0 1.5ch 0.5ch; }
+.menu label { display: flex; gap: 1ch; align-items: center; padding: 0 1.5ch; cursor: pointer; white-space: nowrap; }
+.menu label:hover { background: var(--sel); }
+.menu input { accent-color: var(--head); margin: 0; }
+.menu button { margin: 0.5ch 1.5ch 0; background: none; border: 1px solid var(--line); color: var(--dim); cursor: pointer; padding: 0 0.6ch; }
 
 .title {
   margin: 0;
@@ -203,16 +238,16 @@ td.warn { color: var(--mon); }
   flex-wrap: wrap;
 }
 .keys b { color: var(--head); font-weight: 400; }
+.keys b.new { color: var(--mon); }
 
 /* Narrow: one pane at a time, every pane a tab */
 @media (max-width: 1000px) {
   body { height: auto; min-height: 100%; }
-  .panes { display: block; }
-  .pane, .pane.pinned { border-right: 0; }
-  .pane.pinned:not(.shown) { display: none; }
+  .panes, .panes.no-left.no-right { display: block; }
+  .col, .panes.no-left #left, .panes.no-right #right { display: contents; }
+  .divider, .nothing, .panes.no-left.no-right .nothing { display: none; }
   .pane .scroll { max-height: 70vh; }
   .tabs { flex-wrap: wrap; }
-  .tabs .narrow { display: inline-block; }
   .bar { gap: 1.5ch; }
   .keys { display: none; }
   .filter { width: 14ch; }

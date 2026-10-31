@@ -7,6 +7,7 @@ import { TrunkClient, LivePlayer, escapeHtml as esc } from "/api/client.js";
 const POLL_MS = 3000;
 const EV_KEEP = 3000; // events kept, to re-filter
 const EV_SHOW = 600; // events drawn
+const CHANNEL_KEEP_S = 6 * 3600; // a channel idle this long is dropped
 const HOURS = [
   [1, "1 HOUR"],
   [6, "6 HOURS"],
@@ -44,12 +45,23 @@ const store = {
   },
 };
 
+// The panes: channels and events on the left, one of the others on the right.
+const LEFT = ["channels", "events"];
+const RIGHT = ["groups", "users", "calls", "neighbors", "patches"];
+const PANES = [...LEFT, ...RIGHT]; // keys 1-7
+// Columns hidden until someone shows them.
+const DEFAULT_HIDDEN = { groups: ["hex"] };
+
 const rec = new TrunkClient();
 const player = new LivePlayer({ onNowPlaying: () => mark("header") });
 
+const params = new URLSearchParams(location.search);
 const ui = {
-  system: new URLSearchParams(location.search).get("system") ?? store.get("system", null),
-  tab: new URLSearchParams(location.search).get("tab") ?? store.get("tab", "groups"),
+  system: params.get("system") ?? store.get("system", null),
+  tab: params.get("tab") ?? store.get("tab", "groups"), // the one pane on a narrow screen
+  show: initialShow(), // the panes on a wide one: { channels, events, right }
+  hidden: store.get("hidden", DEFAULT_HIDDEN), // pane → column keys
+
   hours: store.get("hours", 1),
   kinds: new Set(store.get("kinds", ["grant", "unit", "rec"])),
   sort: store.get("sort", {}),
@@ -57,6 +69,18 @@ const ui = {
   paused: false,
   listening: false,
 };
+
+// ?show=channels,users from the address (so each window keeps its own), else as last left.
+function initialShow() {
+  const list = params.get("show");
+  if (list != null) {
+    const xs = list.split(",");
+    return { channels: xs.includes("channels"), events: xs.includes("events"), right: RIGHT.find((r) => xs.includes(r)) ?? null };
+  }
+  const saved = store.get("show", { channels: true, events: true, right: "groups" });
+  const tab = params.get("tab");
+  return RIGHT.includes(tab) ? { ...saved, right: tab } : saved;
+}
 
 // What we know of the system shown; reset when it changes.
 let S = fresh();
@@ -116,12 +140,17 @@ const cmp = (a, b) => {
 
 // cols: { k, label, num?, cls?, get(row) (what sorts and filters), show?(row) (text drawn), find? (filtered on) }
 function drawTable(pane, el, cols, rows, opts = {}) {
+  colsOf[pane] = cols;
+  const all = cols;
+  const off = hiddenOf(pane);
+  cols = cols.filter((c) => !off.has(c.k));
+  if (!cols.length) cols = all;
   const s = ui.sort[pane] ?? opts.sort;
   if (s) {
-    const c = cols.find((c) => c.k === s.k);
+    const c = all.find((c) => c.k === s.k);
     if (c) rows = [...rows].sort((a, b) => cmp(c.get(a), c.get(b)) * s.dir);
   }
-  const f = ui.filter && ui.tab === pane ? ui.filter : "";
+  const f = ui.filter;
   if (f) rows = rows.filter((r) => cols.some((c) => c.find && String(c.show ? c.show(r) : c.get(r) ?? "").toLowerCase().includes(f)));
   const head = cols
     .map((c) => {
@@ -139,8 +168,20 @@ function drawTable(pane, el, cols, rows, opts = {}) {
   return rows.length;
 }
 
-// A click on a heading sorts by it (again: the other way).
+const DEFAULT_SORT = {
+  channels: { k: "freq", dir: 1 },
+  groups: { k: "last", dir: -1 },
+  users: { k: "last", dir: -1 },
+  calls: { k: "time", dir: -1 },
+};
+
+// A click on a heading sorts by it (again: the other way); a right-click chooses the columns.
 for (const id of ["channels", "groups", "users", "calls", "neighbors", "patches"]) {
+  $(id).addEventListener("contextmenu", (ev) => {
+    if (!ev.target.closest("th")) return;
+    ev.preventDefault();
+    openColumns(id, ev.clientX, ev.clientY);
+  });
   $(id).addEventListener("click", (ev) => {
     const th = ev.target.closest("th[data-k]");
     if (!th) return;
@@ -151,13 +192,6 @@ for (const id of ["channels", "groups", "users", "calls", "neighbors", "patches"
     mark(id);
   });
 }
-
-const DEFAULT_SORT = {
-  channels: { k: "freq", dir: 1 },
-  groups: { k: "last", dir: -1 },
-  users: { k: "last", dir: -1 },
-  calls: { k: "time", dir: -1 },
-};
 
 // ── Drawing, at most every 200 ms, and only what's on screen ──────────────
 
@@ -177,7 +211,7 @@ function flush() {
 }
 
 const wide = matchMedia("(min-width: 1001px)");
-const shown = (pane) => ui.tab === pane || (wide.matches && (pane === "channels" || pane === "events"));
+const shown = (pane) => (!wide.matches ? ui.tab === pane : LEFT.includes(pane) ? ui.show[pane] : ui.show.right === pane);
 
 const DRAW = {
   header: drawHeader,
@@ -299,6 +333,9 @@ function drawGroups() {
   }
   const file = rec.talkgroups(ui.system);
   const act = S.active.tgs;
+  // Radios affiliated to each talkgroup, of those heard in the time range (registered or not known to have left).
+  const aff = new Map();
+  for (const u of S.units ?? []) if (u.aff != null && u.reg !== false) aff.set(u.aff, (aff.get(u.aff) ?? 0) + 1);
   const n = drawTable(
     "groups",
     $("groups"),
@@ -307,10 +344,11 @@ function drawGroups() {
       { k: "hex", label: "HEX", get: (r) => hex(r.tg, 4), find: true },
       { k: "tag", label: "TAG", cls: () => "tag", get: (r) => r.alphaTag, find: true },
       { k: "group", label: "CATEGORY", cls: () => "tag", get: (r) => file.get(r.tg)?.group ?? "", find: true },
+      { k: "aff", label: "AFF", num: true, get: (r) => (S.units ? aff.get(r.tg) ?? 0 : null), show: (r) => (S.units ? aff.get(r.tg) || "" : "") },
       { k: "calls", label: "CALLS", num: true, get: (r) => r.calls },
       { k: "secs", label: "AIR", num: true, get: (r) => r.secs, show: (r) => mmss(r.secs) },
-      { k: "enc", label: "ENC%", num: true, get: (r) => r.encPct, show: (r) => (r.encPct ? r.encPct.toFixed(0) : "") },
-      { k: "cipher", label: "CIPHER", get: (r) => r.ciphers?.[0]?.name ?? "" },
+      { k: "enc", label: "ENC%", num: true, get: (r) => r.encPct, show: (r) => (!r.encPct ? "" : r.encPct < 1 ? "<1" : r.encPct.toFixed(0)) },
+      { k: "cipher", label: "CIPHER", get: cipher },
       { k: "flags", label: "FLAGS", get: (r) => [!r.known && "UNLISTED", r.ignore && "IGNORED", r.new && "NEW"].filter(Boolean).join(" ") },
       { k: "last", label: "LAST", num: true, get: (r) => (act.has(r.tg) ? Infinity : r.last), show: (r) => (act.has(r.tg) ? "NOW" : ago(r.last)) },
     ],
@@ -325,6 +363,14 @@ function drawGroups() {
     },
   );
   sub.textContent = `${n} OF ${S.tgsTotal}`;
+}
+
+// The cipher a talkgroup's encrypted calls mostly use. Not for one that's
+// rarely encrypted: a stray call marked encrypted would name it forever.
+const ENC_MIN_PCT = 5;
+function cipher(r) {
+  if (!(r.encPct >= ENC_MIN_PCT) || !r.ciphers?.length) return "";
+  return r.ciphers.reduce((a, b) => (b.calls > a.calls ? b : a)).name;
 }
 
 function drawUsers() {
@@ -459,7 +505,7 @@ function evRow(l) {
   const cls = [`k-${g}`, /emergency/i.test(l.kind) || /emergency/i.test(l.text) ? "e-emerg" : "", l.level === "error" ? "e-error" : ""].join(" ");
   return `<tr class="${cls}"><td>${hms(t)}</td><td>${esc(l.site ?? "")}</td><td>${esc(l.kind.toUpperCase())}</td><td class="text">${esc(l.text)}</td></tr>`;
 }
-const evShown = (l) => ui.kinds.has(kindGroup(l.kind)) && (!ui.filter || ui.tab !== "events" || `${l.kind} ${l.text} ${l.site ?? ""}`.toLowerCase().includes(ui.filter));
+const evShown = (l) => ui.kinds.has(kindGroup(l.kind)) && (!ui.filter || `${l.kind} ${l.text} ${l.site ?? ""}`.toLowerCase().includes(ui.filter));
 
 let evQueue = [];
 function drawEvents(full) {
@@ -557,7 +603,10 @@ rec.on("status", (m) => {
     });
     S.channels.set(key, ch);
   }
-  for (const [key, ch] of S.channels) if (ch.kind === "VC" && !liveKeys.has(key)) ch.live = false;
+  for (const [key, ch] of S.channels) {
+    if (ch.kind === "VC" && !liveKeys.has(key)) ch.live = false;
+    if (!ch.live && now - ch.last > CHANNEL_KEEP_S) S.channels.delete(key);
+  }
 
   // Talkgroups and radios on the air now, for the polled tables' highlights.
   const tgs = new Map(calls.map((c) => [c.talkgroup, c]));
@@ -596,7 +645,8 @@ let qid = 0;
 const pending = new Map(); // id → { what, system }
 function poll() {
   if (!rec.connected || document.hidden || !ui.system) return;
-  const want = [shown("groups") && "talkgroups", shown("users") && "units"].filter(Boolean);
+  // Groups wants the radios too, for its AFF column.
+  const want = [shown("groups") && "talkgroups", (shown("users") || shown("groups")) && "units"].filter(Boolean);
   for (const what of want) {
     if ([...pending.values()].some((p) => p.what === what)) continue;
     const id = ++qid;
@@ -613,7 +663,7 @@ rec.on("radioResult", (m) => {
   pending.delete(m.id);
   if (p.system !== ui.system || p.hours !== ui.hours || m.error) return;
   if (m.what === "talkgroups") (S.tgs = m.rows), (S.tgsTotal = m.total), mark("groups");
-  if (m.what === "units") (S.units = m.rows), (S.unitsTotal = m.total), mark("users");
+  if (m.what === "units") (S.units = m.rows), (S.unitsTotal = m.total), mark("users", "groups");
   S.polledAt = Date.now();
   $("poll").textContent = `REGISTRY ${hms(S.polledAt / 1000)} · EVERY ${POLL_MS / 1000} S`;
 });
@@ -638,6 +688,7 @@ function setSystem(name) {
   if (name === ui.system && S.rates.size) return;
   ui.system = name;
   store.set("system", name);
+  remember();
   S = fresh();
   pending.clear();
   rec.subscribe(["log", `decode:${name}`]);
@@ -648,30 +699,152 @@ function setSystem(name) {
 }
 $("system").onchange = (ev) => setSystem(ev.target.value);
 
-function setTab(tab) {
-  ui.tab = tab;
-  store.set("tab", tab);
-  for (const b of document.querySelectorAll("#tabs [data-tab]")) b.setAttribute("aria-selected", b.dataset.tab === tab);
-  for (const p of document.querySelectorAll(".pane")) p.classList.toggle("shown", p.dataset.pane === tab);
+// 1-7: on a wide screen, 1 and 2 show or hide channels and events, and 3-7
+// choose the pane on the right (again: none); on a narrow one, the pane.
+function togglePane(p) {
+  if (!wide.matches) {
+    ui.tab = p;
+    if (RIGHT.includes(p)) ui.show.right = p;
+  } else if (LEFT.includes(p)) ui.show[p] = !ui.show[p];
+  else {
+    ui.show.right = ui.show.right === p ? null : p;
+    if (ui.show.right) ui.tab = p;
+  }
+  store.set("show", ui.show);
+  store.set("tab", ui.tab);
+  remember();
+  layout();
+}
+
+function layout() {
+  for (const sec of document.querySelectorAll(".pane")) sec.classList.toggle("shown", shown(sec.dataset.pane));
+  for (const b of document.querySelectorAll("#tabs [data-tab]")) b.setAttribute("aria-pressed", shown(b.dataset.tab));
+  $("panes").classList.toggle("no-left", wide.matches && !ui.show.channels && !ui.show.events);
+  $("panes").classList.toggle("no-right", wide.matches && !ui.show.right);
+  closeColumns();
   for (const p of Object.keys(DRAW)) mark(p);
   poll();
 }
+
+// The system and panes in the address too, so a reload (or a bookmark) keeps this window's.
+function remember() {
+  const url = new URL(location.href);
+  if (ui.system) url.searchParams.set("system", ui.system);
+  url.searchParams.set("show", PANES.filter((p) => (LEFT.includes(p) ? ui.show[p] : ui.show.right === p)).join(","));
+  url.searchParams.set("tab", ui.tab);
+  history.replaceState(null, "", url);
+}
+
 $("tabs").addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-tab]");
-  if (b) setTab(b.dataset.tab);
+  if (b) togglePane(b.dataset.tab);
 });
-wide.addEventListener("change", () => {
-  // Channels and events are tabs only on a narrow screen.
-  if (wide.matches && (ui.tab === "channels" || ui.tab === "events")) setTab("groups");
-  else setTab(ui.tab);
+wide.addEventListener("change", layout);
+
+// The dividers: dragged, arrow keys, double-click for even. `prop` is the CSS
+// variable they set, a percentage of the panes' width (x) or the left column's height (y).
+function divider(el, prop, axis, def) {
+  let pct = def;
+  const set = (v) => {
+    pct = Math.round(Math.min(85, Math.max(15, v)) * 10) / 10;
+    $("panes").style.setProperty(prop, `${pct}%`);
+    el.setAttribute("aria-valuenow", Math.round(pct));
+    store.set(prop, pct);
+  };
+  set(store.get(prop, def));
+  el.addEventListener("pointerdown", (ev) => {
+    el.setPointerCapture(ev.pointerId);
+    el.classList.add("dragging");
+    ev.preventDefault();
+  });
+  el.addEventListener("pointermove", (ev) => {
+    if (!el.hasPointerCapture(ev.pointerId)) return;
+    const r = (axis === "x" ? $("panes") : $("left")).getBoundingClientRect();
+    set(axis === "x" ? (100 * (ev.clientX - r.left)) / r.width : (100 * (ev.clientY - r.top)) / r.height);
+  });
+  el.addEventListener("lostpointercapture", () => el.classList.remove("dragging"));
+  el.addEventListener("dblclick", () => set(def));
+  el.addEventListener("keydown", (ev) => {
+    const d = { ArrowLeft: -2, ArrowUp: -2, ArrowRight: 2, ArrowDown: 2 }[ev.key];
+    if (!d) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    set(pct + d);
+  });
+}
+divider($("split-x"), "--split-x", "x", 50);
+divider($("split-y"), "--split-y", "y", 45);
+
+// ── Columns: COLS, or right-click a heading ───────────────────────────────
+
+const colsOf = {}; // pane → its columns, as last drawn
+const hiddenOf = (pane) => new Set(ui.hidden[pane] ?? []);
+const menu = $("colmenu");
+let menuPane = null;
+
+function openColumns(pane, x, y, alignRight = false) {
+  menuPane = pane;
+  drawColumns();
+  menu.hidden = false;
+  const r = menu.getBoundingClientRect();
+  const left = alignRight ? x - r.width : x;
+  menu.style.left = `${Math.max(4, Math.min(left, innerWidth - r.width - 4))}px`;
+  menu.style.top = `${Math.max(4, Math.min(y, innerHeight - r.height - 4))}px`;
+  menu.querySelector("input")?.focus();
+}
+function closeColumns() {
+  menu.hidden = true;
+  menuPane = null;
+}
+function drawColumns() {
+  const off = hiddenOf(menuPane);
+  menu.innerHTML =
+    `<div class="head">${esc(menuPane.toUpperCase())} COLUMNS</div>` +
+    (colsOf[menuPane] ?? []).map((c) => `<label><input type="checkbox" data-k="${c.k}"${off.has(c.k) ? "" : " checked"}>${esc(c.label)}</label>`).join("") +
+    `<button type="button" data-reset>DEFAULTS</button>`;
+}
+function setHidden(pane, keys) {
+  ui.hidden = { ...ui.hidden, [pane]: keys };
+  store.set("hidden", ui.hidden);
+  mark(pane);
+}
+menu.addEventListener("change", (ev) => {
+  const k = ev.target.dataset.k;
+  if (!k) return;
+  const off = hiddenOf(menuPane);
+  ev.target.checked ? off.delete(k) : off.add(k);
+  // One column at least.
+  if (off.size >= (colsOf[menuPane] ?? []).length) return void (ev.target.checked = true);
+  setHidden(menuPane, [...off]);
+});
+menu.addEventListener("click", (ev) => {
+  if (!ev.target.closest("[data-reset]")) return;
+  setHidden(menuPane, DEFAULT_HIDDEN[menuPane] ?? []);
+  drawColumns();
+});
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-cols]");
+  if (!b) return;
+  if (menuPane === b.dataset.cols) return closeColumns();
+  const r = b.getBoundingClientRect();
+  openColumns(b.dataset.cols, r.right, r.bottom + 2, true);
+});
+document.addEventListener("pointerdown", (ev) => {
+  if (!menu.hidden && !menu.contains(ev.target) && !ev.target.closest("[data-cols]")) closeColumns();
 });
 
+function clearFilter() {
+  $("filter").value = "";
+  ui.filter = "";
+  mark(...PANES);
+}
 $("filter").addEventListener("input", (ev) => {
   ui.filter = ev.target.value.trim().toLowerCase();
-  mark(ui.tab);
+  mark(...PANES);
 });
 
 async function toggleListen() {
+  if (!ui.system && !ui.listening) return; // with no system, listen() would play every system
   ui.listening = !ui.listening;
   if (ui.listening) {
     await player.resume();
@@ -686,27 +859,23 @@ async function toggleListen() {
 $("listen").onclick = toggleListen;
 rec.on("audio", (chunk) => ui.listening && player.play(chunk));
 
-const TAB_KEYS = ["channels", "events", "groups", "users", "calls", "neighbors", "patches"];
 document.addEventListener("keydown", (ev) => {
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-  const typing = ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement;
+  if (ev.key === "Escape" && !menu.hidden) return closeColumns();
+  const typing = ev.target.matches("input:not([type=checkbox]), select");
   if (ev.key === "Escape" && ev.target === $("filter")) {
-    $("filter").value = "";
-    ui.filter = "";
+    clearFilter();
     $("filter").blur();
-    mark(ui.tab);
     return;
   }
   if (typing) return;
   const n = Number(ev.key);
-  if (n >= 1 && n <= TAB_KEYS.length) {
-    const tab = TAB_KEYS[n - 1];
-    if (!(wide.matches && (tab === "channels" || tab === "events"))) setTab(tab);
-  } else if (ev.key === "/") {
+  if (n >= 1 && n <= PANES.length) togglePane(PANES[n - 1]);
+  else if (ev.key === "/") {
     ev.preventDefault();
     $("filter").focus();
   } else if (ev.key === "l" || ev.key === "L") toggleListen();
-  else if (ev.key === " " && !(ev.target instanceof HTMLButtonElement)) {
+  else if (ev.key === " " && !ev.target.matches("button, input")) {
     ev.preventDefault();
     togglePause();
   }
@@ -714,7 +883,6 @@ document.addEventListener("keydown", (ev) => {
 
 setInterval(() => ($("clock").textContent = hms(Date.now() / 1000)), 1000);
 
-if (wide.matches && (ui.tab === "channels" || ui.tab === "events")) ui.tab = "groups";
-setTab(ui.tab);
+layout();
 if (ui.system) setSystem(ui.system);
 mark("header", "sites");
