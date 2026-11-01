@@ -4,7 +4,15 @@
 // seconds. See API-NOTES.md for what a push would do better.
 import { TrunkClient, LivePlayer, escapeHtml as esc } from "/api/client.js";
 
-const POLL_MS = 3000;
+// The registry tables are asked for again when something they show has changed
+// (a call ended, a radio registered or affiliated…), at most every POLL_MIN_MS,
+// and at least every POLL_IDLE_MS. Radios wanted only for Groups' AFF: less often.
+const POLL_MIN_MS = 3000;
+const POLL_AFF_MS = 15000;
+const POLL_IDLE_MS = 30000;
+const POLL_TICK_MS = 1000;
+// Control channel messages that change the radios table.
+const UNIT_KINDS = new Set(["registration", "deregistration", "affiliation", "location"]);
 const EV_KEEP = 3000; // events kept, to re-filter
 const EV_SHOW = 600; // events drawn
 const CHANNEL_KEEP_S = 6 * 3600; // a channel idle this long is dropped
@@ -93,7 +101,8 @@ function fresh() {
     units: null, // radioQuery units rows
     tgsTotal: 0,
     unitsTotal: 0,
-    polledAt: 0,
+    polled: {}, // what → when last asked (ms)
+    stale: {}, // what → something it shows has changed since
     active: { tgs: new Map(), units: new Set(), key: "" },
     events: [],
   };
@@ -476,7 +485,7 @@ function drawNeighbors() {
       { k: "ours", label: "FOLLOWED AS", get: (r) => r.ours, find: true },
     ],
     rows,
-    { empty: S.detail ? "No neighbours announced (only P25 control channels announce them)." : "Waiting for the control channel's detail…", rowClass: (r) => (r.ours ? "cc" : "") },
+    { empty: S.detail ? "No neighbors announced (only P25 control channels announce them)." : "Waiting for the control channel's detail…", rowClass: (r) => (r.ours ? "cc" : "") },
   );
 }
 
@@ -503,11 +512,13 @@ function evRow(l) {
   const g = kindGroup(l.kind);
   const t = l.time ?? (l.timeS ? wall(l.timeS) : null);
   const cls = [`k-${g}`, /emergency/i.test(l.kind) || /emergency/i.test(l.text) ? "e-emerg" : "", l.level === "error" ? "e-error" : ""].join(" ");
-  return `<tr class="${cls}"><td>${hms(t)}</td><td>${esc(l.site ?? "")}</td><td>${esc(l.kind.toUpperCase())}</td><td class="text">${esc(l.text)}</td></tr>`;
+  return `<tr id="ev${l.seq}" class="${cls}"><td>${hms(t)}</td><td>${esc(l.site ?? "")}</td><td>${esc(l.kind.toUpperCase())}</td><td class="text">${esc(l.text)}<span class="n">${repeats(l)}</span></td></tr>`;
 }
+const repeats = (l) => (l.n > 1 ? ` ×${l.n}` : "");
 const evShown = (l) => ui.kinds.has(kindGroup(l.kind)) && (!ui.filter || `${l.kind} ${l.text} ${l.site ?? ""}`.toLowerCase().includes(ui.filter));
 
 let evQueue = [];
+const evBumped = new Set(); // lines drawn already whose repeats went up
 function drawEvents(full) {
   if (ui.paused) return;
   const box = $("events-scroll");
@@ -519,14 +530,42 @@ function drawEvents(full) {
     const body = el.tBodies[0];
     body.insertAdjacentHTML("beforeend", evQueue.filter(evShown).map(evRow).join(""));
     while (body.rows.length > EV_SHOW) body.deleteRow(0);
+    for (const l of evBumped) {
+      const n = document.getElementById(`ev${l.seq}`)?.querySelector(".n");
+      if (n) n.textContent = repeats(l);
+    }
   }
   evQueue = [];
+  evBumped.clear();
   if (stick || full) box.scrollTop = box.scrollHeight;
 }
 
+// The control channel says most things more than once: a line the same as one
+// heard in the last couple of seconds is counted on it (×2), not drawn again.
+const REPEAT_MS = 2000;
+let evSeq = 0;
+function repeatOf(l, now) {
+  for (let i = S.events.length - 1, n = 0; i >= 0 && n < 50; i--, n++) {
+    const e = S.events[i];
+    if (now - e.at > REPEAT_MS) break;
+    if (e.kind === l.kind && e.text === l.text && e.site === l.site) return e;
+  }
+  return null;
+}
+
 rec.on("log", (m) => {
+  const now = Date.now();
   for (const l of m.lines) {
     if (l.system && l.system !== ui.system) continue;
+    if (UNIT_KINDS.has(l.kind)) S.stale.units = true;
+    const again = repeatOf(l, now);
+    if (again) {
+      again.n = (again.n ?? 1) + 1;
+      evBumped.add(again);
+      continue;
+    }
+    l.at = now;
+    l.seq = ++evSeq;
     S.events.push(l);
     evQueue.push(l);
   }
@@ -613,6 +652,7 @@ rec.on("status", (m) => {
   const units = new Set(calls.flatMap((c) => c.sources));
   const key = `${[...tgs.keys()].sort()}|${[...units].sort()}`;
   const changed = key !== S.active.key;
+  if (changed) S.stale.talkgroups = S.stale.units = true;
   S.active = { tgs, units, key };
 
   mark("header", "sites", "channels", ...(changed ? ["groups", "users"] : []));
@@ -627,7 +667,10 @@ rec.on("decodeDetail", (m) => {
   mark("channels", "neighbors", "patches");
 });
 
-rec.on("concluded", () => mark("calls"));
+rec.on("concluded", (m) => {
+  if (m.entry?.record?.short_name === ui.system) S.stale.talkgroups = S.stale.units = true;
+  mark("calls");
+});
 rec.on("history", () => mark("calls"));
 rec.on("state", () => mark("header", "sites"));
 rec.on("config", () => mark("header"));
@@ -635,6 +678,7 @@ rec.on("talkgroups", () => mark("groups", "users", "calls"));
 
 rec.on("connection", (up) => {
   pending.clear();
+  S.polled = {}; // what came while away is missed: ask again
   mark("header", "sites");
   if (up) poll();
 });
@@ -645,16 +689,23 @@ let qid = 0;
 const pending = new Map(); // id → { what, system }
 function poll() {
   if (!rec.connected || document.hidden || !ui.system) return;
-  // Groups wants the radios too, for its AFF column.
-  const want = [shown("groups") && "talkgroups", (shown("users") || shown("groups")) && "units"].filter(Boolean);
-  for (const what of want) {
+  const now = Date.now();
+  const want = [];
+  if (shown("groups")) want.push(["talkgroups", POLL_MIN_MS]);
+  if (shown("users")) want.push(["units", POLL_MIN_MS]);
+  else if (shown("groups")) want.push(["units", POLL_AFF_MS]);
+  for (const [what, min] of want) {
     if ([...pending.values()].some((p) => p.what === what)) continue;
+    const since = now - (S.polled[what] ?? 0);
+    if (since < min || (!S.stale[what] && since < POLL_IDLE_MS)) continue;
+    S.polled[what] = now;
+    S.stale[what] = false;
     const id = ++qid;
     pending.set(id, { what, system: ui.system, hours: ui.hours });
     rec.send({ type: "radioQuery", id, what, system: ui.system, hours: ui.hours, limit: 1000 });
   }
 }
-setInterval(poll, POLL_MS);
+setInterval(poll, POLL_TICK_MS);
 document.addEventListener("visibilitychange", poll);
 
 rec.on("radioResult", (m) => {
@@ -664,8 +715,7 @@ rec.on("radioResult", (m) => {
   if (p.system !== ui.system || p.hours !== ui.hours || m.error) return;
   if (m.what === "talkgroups") (S.tgs = m.rows), (S.tgsTotal = m.total), mark("groups");
   if (m.what === "units") (S.units = m.rows), (S.unitsTotal = m.total), mark("users", "groups");
-  S.polledAt = Date.now();
-  $("poll").textContent = `REGISTRY ${hms(S.polledAt / 1000)} · EVERY ${POLL_MS / 1000} S`;
+  $("poll").textContent = `REGISTRY ${hms(Date.now() / 1000)}`;
 });
 
 for (const sel of document.querySelectorAll("select.hours")) {
@@ -676,6 +726,7 @@ for (const sel of document.querySelectorAll("select.hours")) {
     store.set("hours", ui.hours);
     for (const s of document.querySelectorAll("select.hours")) s.value = ui.hours;
     S.tgs = S.units = null;
+    S.polled = {};
     pending.clear();
     mark("groups", "users");
     poll();

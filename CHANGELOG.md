@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1]
+
+- Events: a line the control channel repeats within 2 s is counted on the first (`×2`) instead of
+  drawn again.
+- Groups and Users are polled when something they show changes, at most every 3 s and at least
+  every 30 s, instead of every 3 s regardless.
+- With Groups shown and Users not, the radios (for AFF) are polled every 15 s, not every 3 s.
+- US spelling throughout (neighboring, colors, gray).
+
 ## [0.2.0]
 
 - Groups: an AFF column, the radios affiliated to each talkgroup.

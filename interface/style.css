@@ -218,6 +218,7 @@ td.warn { color: var(--mon); }
 /* Events */
 .events td { white-space: pre; }
 .events td.text { white-space: pre-wrap; word-break: break-word; }
+.events .n { color: var(--dim); }
 .events .k-grant { color: var(--rec); }
 .events .k-update { color: #5f875f; }
 .events .k-unit { color: var(--head); }

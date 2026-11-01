@@ -1,8 +1,8 @@
 {
   "id": "trunk-classic",
   "name": "Trunk Classic",
-  "version": "0.2.0",
-  "description": "A classic text-mode trunk tracker view: each site's control channel, the channels in use, talkgroups, radios and their affiliations, calls, neighbouring sites, patches and the control channel's messages as they come.",
+  "version": "0.2.1",
+  "description": "A classic text-mode trunk tracker view: each site's control channel, the channels in use, talkgroups, radios and their affiliations, calls, neighboring sites, patches and the control channel's messages as they come.",
   "api": 1,
   "access": "listen",
   "license": "MIT",
