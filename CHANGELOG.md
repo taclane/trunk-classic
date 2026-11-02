@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.2]
+
+- Needs Trunk Recorder Pro 0.3.0 or later (it was 0.2.6).
+- A conventional system gets a row in the sites table (its channels open now, calls and
+  recordings) instead of an empty table.
+- A conventional system's Channels lists every channel in its config, idle ones too, with HITS
+  and SEEN from its recorded calls.
+- Channels: a CODE column, a conventional channel's code: the one it's set to record, else the
+  codes heard on it, else its latest call's NAC.
+- Calls asks the recorder for the system's own latest 300 calls, so a quiet
+  system's list isn't crowded out by a busy one's.
+- A conventional system chosen in the address stays chosen while the recorder's first status is on
+  its way.
+- The Groups and Users titles count the rows when the recorder sends no total, instead of
+  `OF undefined`.
+- SYSTEM has ALL (with more than one system): every system at once, each table with a SYSTEM
+  column, and `L` playing every system's calls. `?system=*` opens it.
+- Screenshots of this version.
+
 ## [0.2.1]
 
 - Events: a line the control channel repeats within 2 s is counted on the first (`×2`) instead of

@@ -5,7 +5,8 @@ a monospace screen of each site's control channel, the channels in use, talkgrou
 their affiliations, recorded calls, neighboring sites, patches, and the control channel's
 messages scrolling by.
 
-Made for Trunk Recorder Pro 0.2.6 and later.
+Needs Trunk Recorder Pro 0.3.0 or later: Calls asks the recorder's call store for each system's
+calls.
 
 It is an [interface](https://github.com/TrunkRecorder/trunk-recorder-pro/blob/main/docs/interfaces/README.md):
 static files, no build step, listen access only. It changes nothing on the recorder.
@@ -26,7 +27,7 @@ trunk-pro interface add trunk-classic/interface  # or keep it
 
 Or **Interfaces → Add a folder…** in the recorder's own interface.
 
-`?system=<shortName>` opens a system, `?show=channels,events,groups` the panes shown (on a narrow
+`?system=<shortName>` opens a system (`?system=*` all of them), `?show=channels,events,groups` the panes shown (on a narrow
 screen, `?tab=<pane>` the one pane). The address keeps up as you change them, so each browser
 window keeps its own: open two and show different panes in each.
 
@@ -35,11 +36,11 @@ window keeps its own: open two and show different panes in each.
 | Pane | What | From |
 |---|---|---|
 | Sites (top) | Each site: modulation, WACN, SYS, RFSS-SITE, NAC, control channel, messages a second and the share decoded over the last 5 s, calls now, calls recorded | `status`, ~2/s |
-| Channels | Every frequency a call was followed on since the page opened, and the control channels: what's on it now (talkgroup, unit, slot, recording / encrypted / ignored…), hits, SNR, last seen | `status` calls + `decodeDetail` |
+| Channels | Trunked: every frequency a call was followed on since the page opened, and the control channels. Conventional: every channel in the system's config, idle or not, with its code (the one it's set to record, else the codes heard on it, else its latest call's NAC). Both: what's on it now (talkgroup, unit, slot, recording / encrypted / ignored…), hits, SNR, last seen | `status` calls + `decodeDetail`; conventional: the config, `heard` and the calls listed |
 | Events | The control channel's messages as they come, filtered by kind: grants, updates, units (registration, affiliation, location…), patches, site, undecoded, the recorder's own lines; a line repeated within 2 s is counted on the first (`×2`) | `subscribe log` |
 | Groups | Talkgroups heard in the last 1 h – 7 d: radios affiliated, calls, airtime, encryption and cipher, unlisted / ignored / new; those on the air now lit | `radioQuery talkgroups` and `units`, polled (below) |
 | Users | Radios heard: alias, affiliated talkgroup and since when, registered, transmissions, airtime, the talkgroups they use; those talking now lit | `radioQuery units`, polled (below) |
-| Calls | Recorded calls of the system; click one to play it (when the recorder keeps audio) | `history` + `concluded` |
+| Calls | The system's latest recorded calls, up to 300 of its own; click one to play it (when the recorder keeps audio) | `callsQuery` + `history` + `concluded` |
 | Neighbors | Adjacent sites each control channel announces; the ones being followed lit | `decodeDetail` |
 | Patches | Patches standing now | `decodeDetail` |
 
@@ -65,6 +66,10 @@ Groups at once.
 The system, panes, divider positions, columns, sort, event kinds and time range are remembered in
 the browser.
 
+**ALL**, the last choice under SYSTEM when there's more than one, shows every system at once:
+the sites of each, and every table with a SYSTEM column (hidden again from COLS like any other).
+Talkgroups, radios and calls are asked for of each system, and `L` plays every system's calls.
+
 ## Limits
 
 - Groups and Users are asked for again when something they show changes (a call ends, a radio
@@ -74,7 +79,11 @@ the browser.
 - AFF counts only the radios heard in the time range Groups shows.
 - ENC% is over every call the recorder has kept of the talkgroup, not just the time range. CIPHER
   is named only for a talkgroup at least 5% encrypted.
-- Channels are only those the recorder followed a call on, without channel numbers (LCN).
+- A trunked system's channels are only those the recorder followed a call on, without channel
+  numbers (LCN). A conventional channel's HITS and SEEN come from the calls Calls lists; its SNR
+  shows only while a call is up.
+- A conventional system whose channels come from a channel file (`channelFile`) lists its channels
+  only as they're heard.
 - Event times are the browser's clock lined up with the recorder's, to within a second or so.
 
 ## Releasing

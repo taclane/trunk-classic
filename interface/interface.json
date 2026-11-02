@@ -1,7 +1,7 @@
 {
   "id": "trunk-classic",
   "name": "Trunk Classic",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A classic text-mode trunk tracker view: each site's control channel, the channels in use, talkgroups, radios and their affiliations, calls, neighboring sites, patches and the control channel's messages as they come.",
   "api": 1,
   "access": "listen",
@@ -14,7 +14,7 @@
     },
     {
       "path": "screenshots/users.png",
-      "caption": "Radios: their affiliations, registrations and airtime"
+      "caption": "Radios: their affiliations, registrations and airtime, with the column picker open"
     },
     {
       "path": "screenshots/phone.png",
