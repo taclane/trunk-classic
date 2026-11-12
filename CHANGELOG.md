@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.3]
+
+- Needs Trunk Recorder Pro 0.3.1 or later (it was 0.3.0).
+- Neighbors are read from each site's status, where TRP 0.3.1 moved them, instead of the decoder's
+  detail: the pane was empty on 0.3.1 and later.
+
 ## [0.2.2]
 
 - Needs Trunk Recorder Pro 0.3.0 or later (it was 0.2.6).

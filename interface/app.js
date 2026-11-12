@@ -97,7 +97,8 @@ function fresh() {
     channels: new Map(), // `${system}|${freqHz}/${slot}` (conventional: `…/conv`) → channel row
     calls: new Map(), // system → its latest calls (callsQuery), beside the history
     rates: new Map(), // `${system}|${site}` → recent { t, good, bad } samples
-    detail: {}, // system → decodeDetail
+    detail: {}, // system → decodeDetail (channels SNR, patches)
+    adjacentKey: "", // the neighbors last drawn, to redraw when they change
     tgs: new Map(), // system → { rows, total } (radioQuery talkgroups; each row's `sys` added)
     units: new Map(), // system → { rows, total } (radioQuery units)
     polled: {}, // what → when last asked (ms)
@@ -581,10 +582,12 @@ $("player").addEventListener("ended", () => {
 });
 
 function drawNeighbors() {
-  // Sites being followed, of any system shown: an adjacent site may be another system's.
-  const ours = new Map((rec.status?.systems ?? []).filter((s) => mine(s.shortName)).flatMap((sys) => sys.sites.map((s) => [`${s.identity.sysId}/${s.identity.rfss}/${s.identity.site}`, s.name])));
-  const rows = Object.entries(S.detail).flatMap(([sys, d]) => (d.sites ?? []).flatMap((s) => s.adjacent.map((a) => ({ sys, from: s.name, ...a, ours: ours.get(`${a.sysId}/${a.rfss}/${a.site}`) ?? "" }))));
-  const any = Object.keys(S.detail).length > 0;
+  // Each site's neighbors come with its status (since TRP 0.3.1). Sites being followed, of any
+  // system shown: an adjacent site may be another system's.
+  const systems = (rec.status?.systems ?? []).filter((s) => mine(s.shortName));
+  const ours = new Map(systems.flatMap((sys) => sys.sites.map((s) => [`${s.identity.sysId}/${s.identity.rfss}/${s.identity.site}`, s.name])));
+  const rows = systems.flatMap((sys) => sys.sites.flatMap((s) => (s.adjacent ?? []).map((a) => ({ sys: sys.shortName, from: s.name, ...a, ours: ours.get(`${a.sysId}/${a.rfss}/${a.site}`) ?? "" }))));
+  const any = systems.length > 0;
   drawTable(
     "neighbors",
     $("neighbors"),
@@ -731,7 +734,12 @@ rec.on("status", (m) => {
   if (changed) S.stale.talkgroups = S.stale.units = true;
   S.active = { tgs, units, key };
 
-  mark("header", "sites", "channels", ...(changed ? ["groups", "users"] : []));
+  // Neighbors redrawn only when a site's list changes.
+  const adj = JSON.stringify(systems.map((sys) => sys.sites.map((s) => s.adjacent ?? [])));
+  const adjChanged = adj !== S.adjacentKey;
+  S.adjacentKey = adj;
+
+  mark("header", "sites", "channels", ...(changed ? ["groups", "users"] : []), ...(adjChanged ? ["neighbors"] : []));
 });
 
 // One system's control channels and calls on the air into S.channels; the keys live now into `liveKeys`.
@@ -788,7 +796,7 @@ rec.on("decodeDetail", (m) => {
   for (const c of m.channels) {
     for (const ch of S.channels.values()) if (ch.sys === m.system && ch.freq === c.freqHz && ch.live) ch.snr = c.snrDb;
   }
-  mark("channels", "neighbors", "patches");
+  mark("channels", "patches");
 });
 
 rec.on("concluded", (m) => {

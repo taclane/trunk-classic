@@ -5,8 +5,8 @@ a monospace screen of each site's control channel, the channels in use, talkgrou
 their affiliations, recorded calls, neighboring sites, patches, and the control channel's
 messages scrolling by.
 
-Needs Trunk Recorder Pro 0.3.0 or later: Calls asks the recorder's call store for each system's
-calls.
+Needs Trunk Recorder Pro 0.3.1 or later: Calls asks the recorder's call store for each system's
+calls, and Neighbors reads each site's status.
 
 It is an [interface](https://github.com/TrunkRecorder/trunk-recorder-pro/blob/main/docs/interfaces/README.md):
 static files, no build step, listen access only. It changes nothing on the recorder.
